@@ -1,0 +1,515 @@
+{
+  "pullRequest": {
+    "owner": "udacity",
+    "repo": "cd14715-simple-todo-app",
+    "number": 3
+  },
+  "fileReviews": [
+    {
+      "file": "src/premium.ts",
+      "codeQuality": {
+        "file": "src/premium.ts",
+        "issues": [
+          {
+            "line": 20,
+            "severity": "critical",
+            "category": "security",
+            "description": "Credit card details stored in plain text in PaymentDetails interface. Sensitive payment information should never be held in memory or transmitted without encryption. This violates PCI DSS compliance requirements.",
+            "suggestion": "Remove storing full card numbers. Only accept tokenized payment data from a secure payment processor (Stripe, Square, etc.). Never handle raw card data in your application. Store only the last 4 digits for display purposes."
+          },
+          {
+            "line": 60,
+            "severity": "high",
+            "category": "security",
+            "description": "Card number validation is insufficient - only checks length without validating the Luhn algorithm. This allows invalid card numbers to pass validation and be processed.",
+            "suggestion": "Implement Luhn algorithm validation: function isValidCardNumber(cardNumber: string): boolean { const digits = cardNumber.replace(/\\D/g, ''); if (digits.length < 13) return false; let sum = 0, isEven = false; for (let i = digits.length - 1; i >= 0; i--) { let digit = parseInt(digits[i], 10); if (isEven) digit *= 2; if (digit > 9) digit -= 9; sum += digit; isEven = !isEven; } return sum % 10 === 0; }"
+          },
+          {
+            "line": 68,
+            "severity": "high",
+            "category": "bug-risk",
+            "description": "Card expiry date validation has a Y2K-like bug. Using 'new Date(2000 + parseInt(year), parseInt(month) - 1)' means cards valid until 2099 will be treated as expired in year 2100. For 2-digit years, this assumes 2000-2099 range.",
+            "suggestion": "Determine century based on current year context: const currentYear = new Date().getFullYear(); const century = currentYear > 2000 ? 2000 : 1900; const fullYear = century + parseInt(year); OR better: use a payment processor that handles this complexity."
+          },
+          {
+            "line": 78,
+            "severity": "high",
+            "category": "bug-risk",
+            "description": "Expired card check is incorrect - it should check if expiry is in the PAST, but creating a Date with month-1 and not setting the day means comparisons may be off by a month. For example, a card expiring 12/25 creates Dec 1, 2025 00:00, which may be before today's date even if card is valid through Dec 31, 2025.",
+            "suggestion": "Set expiry to the last day of the expiry month: const expiryDate = new Date(fullYear, parseInt(month), 0); // Last day of previous month. This ensures cards are valid through the entire expiry month."
+          },
+          {
+            "line": 101,
+            "severity": "high",
+            "category": "security",
+            "description": "SQL injection vulnerability in chargeCard function. While using parameterized queries for the INSERT, the function doesn't validate that 'amount' is a valid number, potentially allowing injection if the query construction is changed in future.",
+            "suggestion": "Add explicit validation: if (typeof amount !== 'number' || amount <= 0 || !Number.isFinite(amount)) { throw new Error('Invalid amount'); } before passing to query."
+          },
+          {
+            "line": 110,
+            "severity": "high",
+            "category": "bug-risk",
+            "description": "Generic error handling with console.error. Payment failures are silently logged but not properly tracked. This makes debugging payment issues difficult and prevents proper error notifications to users.",
+            "suggestion": "Implement structured error logging and retry logic: catch (error) { logger.error('Payment charge failed', { userId, amount, error }); if (isRetryable(error)) { return retryCharge(payment, amount); } throw error; }"
+          },
+          {
+            "line": 136,
+            "severity": "high",
+            "category": "bug-risk",
+            "description": "Unsafe JSON.parse at line 134 without error handling. If subscription.features contains malformed JSON, this will throw an unhandled exception, potentially crashing the application.",
+            "suggestion": "Add try-catch: const features = (() => { try { return JSON.parse(subscription.features); } catch { logger.warn('Invalid features JSON', { userId, features: subscription.features }); return []; } })();"
+          },
+          {
+            "line": 149,
+            "severity": "high",
+            "category": "bug-risk",
+            "description": "Unsafe JSON.parse at line 161 without error handling. If stored features JSON is corrupted, this will crash. No fallback for malformed data.",
+            "suggestion": "Add error handling: const features = (() => { try { return JSON.parse(row.features); } catch (e) { logger.warn('Failed to parse subscription features', { userId }); return []; } })();"
+          },
+          {
+            "line": 125,
+            "severity": "medium",
+            "category": "maintainability",
+            "description": "Hardcoded subscription tier feature lists are duplicated and scattered. Tier configuration should be centralized to avoid inconsistencies when features are added or modified.",
+            "suggestion": "Create a tier configuration object: const TIER_FEATURES = { premium: ['unlimited_todos', 'priority_support', 'custom_themes'], enterprise: ['unlimited_todos', 'priority_support', 'custom_themes', 'api_access', 'team_collaboration'] }; then use: const features = TIER_FEATURES[tier];"
+          },
+          {
+            "line": 69,
+            "severity": "medium",
+            "category": "maintainability",
+            "description": "Regex pattern is using escaped backslashes (\\\\/) which is confusing. While technically correct, it reduces readability.",
+            "suggestion": "Use raw string or simpler pattern: const expiryRegex = /^(0[1-9]|1[0-2])\\/\\d{2}$/; Or validate programmatically for clarity."
+          },
+          {
+            "line": 90,
+            "severity": "medium",
+            "category": "performance",
+            "description": "Pricing calculation happens on every payment. If this involves currency conversion or tax lookups in future, repeated calls could be inefficient. Currently acceptable but not optimal for scaling.",
+            "suggestion": "Consider caching tier pricing with memoization or storing in a configuration: const TIER_PRICING = { premium: 9.99, enterprise: 49.99 }; const TAX_RATE = 0.08; // Load from config/database"
+          },
+          {
+            "line": 139,
+            "severity": "medium",
+            "category": "maintainability",
+            "description": "Database queries use raw string SQL. While parameterized queries are used correctly here, the codebase would benefit from an abstraction layer or query builder to reduce duplication.",
+            "suggestion": "Consider using a query builder library (Knex.js, Prisma, TypeORM) or create a repository layer to encapsulate database operations and reduce SQL string duplication across the file."
+          },
+          {
+            "line": 69,
+            "severity": "low",
+            "category": "best-practice",
+            "description": "The validation functions don't use early returns consistently and have multiple return statements spread throughout the function. This reduces readability.",
+            "suggestion": "Refactor validatePaymentDetails to fail fast with early returns for each validation step: if (cardNumber.length !== 16) return false; if (!isValidCardNumber(cardNumber)) return false; etc."
+          }
+        ],
+        "overallScore": 32,
+        "summary": "This payment processing file has critical security vulnerabilities related to storing sensitive credit card data in plain text, insufficient card validation, and unhandled JSON parsing errors. The code handles payment logic without test coverage and contains bugs in expiry date validation logic. The architecture violates PCI DSS compliance by handling raw card numbers."
+      },
+      "testCoverage": {
+        "file": "src/premium.ts",
+        "hasTests": false,
+        "testFiles": [],
+        "untestedPaths": [
+          {
+            "type": "function",
+            "location": "processPremiumPayment",
+            "priority": "critical",
+            "reasoning": "Main payment processing function handles financial transactions. No tests exist to verify correct payment flow, error handling, or subscription upgrade on success.",
+            "suggestedTest": "Call processPremiumPayment with valid payment details for 'premium' tier where payment amount equals the calculated subscription price, and assert it returns true and calls upgradeUserSubscription."
+          },
+          {
+            "type": "branch",
+            "location": "processPremiumPayment - validatePaymentDetails check",
+            "priority": "critical",
+            "reasoning": "Validation failure path is untested. Invalid payment details should throw an error and prevent processing.",
+            "suggestedTest": "Call processPremiumPayment with a PaymentDetails object where cardNumber.length is 15 (invalid), and assert it throws 'Invalid payment details' error without calling chargeCard."
+          },
+          {
+            "type": "branch",
+            "location": "processPremiumPayment - insufficient payment amount check",
+            "priority": "critical",
+            "reasoning": "Amount validation is untested. Should prevent processing if payment amount is below subscription price.",
+            "suggestedTest": "Call processPremiumPayment with payment.amount = 5.00 for 'premium' tier (calculated price ~11.03), and assert it throws 'Insufficient payment amount' error."
+          },
+          {
+            "type": "branch",
+            "location": "processPremiumPayment - chargeCard failure",
+            "priority": "critical",
+            "reasoning": "Payment failure path is untested. Should return false without upgrading subscription when payment fails.",
+            "suggestedTest": "Call processPremiumPayment where chargeCard returns false (mocked), and assert the function returns false and does not call upgradeUserSubscription."
+          },
+          {
+            "type": "function",
+            "location": "validatePaymentDetails",
+            "priority": "critical",
+            "reasoning": "Card validation is a security-critical function with multiple validation rules. Each rule is untested.",
+            "suggestedTest": "Call validatePaymentDetails with cardNumber.length = 17 and assert it returns false."
+          },
+          {
+            "type": "branch",
+            "location": "validatePaymentDetails - card number validation",
+            "priority": "critical",
+            "reasoning": "Card number length check is untested. Invalid lengths should return false.",
+            "suggestedTest": "Call validatePaymentDetails with cardNumber = '123' (length 3), and assert it returns false."
+          },
+          {
+            "type": "branch",
+            "location": "validatePaymentDetails - CVV validation",
+            "priority": "critical",
+            "reasoning": "CVV length validation is untested. Only 3 or 4 digits are valid.",
+            "suggestedTest": "Call validatePaymentDetails with cvv = '12' (length 2), and assert it returns false."
+          },
+          {
+            "type": "branch",
+            "location": "validatePaymentDetails - CVV 4-digit valid case",
+            "priority": "high",
+            "reasoning": "The 4-digit CVV case (American Express) is not tested to ensure it passes validation.",
+            "suggestedTest": "Call validatePaymentDetails with valid cardNumber, expiryDate, and cvv = '1234' (length 4), and assert it returns true."
+          },
+          {
+            "type": "branch",
+            "location": "validatePaymentDetails - expiry date format",
+            "priority": "critical",
+            "reasoning": "Expiry date format validation (MM/YY) is untested. Invalid formats should return false.",
+            "suggestedTest": "Call validatePaymentDetails with expiryDate = '13/25' (invalid month), and assert it returns false."
+          },
+          {
+            "type": "branch",
+            "location": "validatePaymentDetails - expiry date boundary (invalid month)",
+            "priority": "high",
+            "reasoning": "Month boundary validation is untested for values outside 01-12.",
+            "suggestedTest": "Call validatePaymentDetails with expiryDate = '00/25', and assert it returns false."
+          },
+          {
+            "type": "branch",
+            "location": "validatePaymentDetails - expired card check",
+            "priority": "critical",
+            "reasoning": "Expiration date comparison is untested. Expired cards should return false.",
+            "suggestedTest": "Call validatePaymentDetails with expiryDate = '12/20' (a past year), and assert it returns false."
+          },
+          {
+            "type": "branch",
+            "location": "validatePaymentDetails - valid future expiry",
+            "priority": "high",
+            "reasoning": "Valid future expiry dates are not tested to ensure they pass validation.",
+            "suggestedTest": "Call validatePaymentDetails with expiryDate = '12/30' (a future year), cardNumber of length 16, and cvv of length 3, and assert it returns true."
+          },
+          {
+            "type": "function",
+            "location": "calculateSubscriptionPrice",
+            "priority": "critical",
+            "reasoning": "Pricing calculation is untested. Incorrect calculations could result in revenue loss or overcharging.",
+            "suggestedTest": "Call calculateSubscriptionPrice('premium') and assert it returns approximately 11.03 (9.99 + 0.80 tax + 0.29 fee)."
+          },
+          {
+            "type": "branch",
+            "location": "calculateSubscriptionPrice - premium tier",
+            "priority": "high",
+            "reasoning": "Premium pricing calculation is untested.",
+            "suggestedTest": "Call calculateSubscriptionPrice('premium') and assert the returned value equals basePrice 9.99 plus 8% tax plus 2.9% processing fee."
+          },
+          {
+            "type": "branch",
+            "location": "calculateSubscriptionPrice - enterprise tier",
+            "priority": "high",
+            "reasoning": "Enterprise pricing calculation is untested.",
+            "suggestedTest": "Call calculateSubscriptionPrice('enterprise') and assert it returns approximately 56.09 (49.99 + 3.99 tax + 1.45 fee)."
+          },
+          {
+            "type": "function",
+            "location": "chargeCard",
+            "priority": "critical",
+            "reasoning": "Payment processing function is untested. Should handle database operations and errors correctly.",
+            "suggestedTest": "Call chargeCard with valid payment and amount, assert it returns true and executes the INSERT query with correct parameters (last 4 digits, amount, 'completed')."
+          },
+          {
+            "type": "branch",
+            "location": "chargeCard - successful charge",
+            "priority": "critical",
+            "reasoning": "Successful payment path is untested.",
+            "suggestedTest": "Mock db.query to resolve successfully, call chargeCard, and assert it returns true."
+          },
+          {
+            "type": "branch",
+            "location": "chargeCard - database error handling",
+            "priority": "critical",
+            "reasoning": "Error handling for database failures is untested. Should return false and log error.",
+            "suggestedTest": "Mock db.query to throw an error, call chargeCard, assert it returns false and console.error was called."
+          },
+          {
+            "type": "edge-case",
+            "location": "chargeCard - card number last 4 extraction",
+            "priority": "high",
+            "reasoning": "The slice(-4) operation on cardNumber is untested. Should correctly extract last 4 digits.",
+            "suggestedTest": "Call chargeCard with payment.cardNumber = '1234567890123456', and assert the INSERT query uses '3456' as the last 4 digits."
+          },
+          {
+            "type": "function",
+            "location": "upgradeUserSubscription",
+            "priority": "critical",
+            "reasoning": "Subscription upgrade is untested. Incorrect tier handling or feature assignment could prevent users from accessing paid features.",
+            "suggestedTest": "Call upgradeUserSubscription with userId and tier='premium', and assert the INSERT query sets features to ['unlimited_todos', 'priority_support', 'custom_themes']."
+          },
+          {
+            "type": "branch",
+            "location": "upgradeUserSubscription - premium tier features",
+            "priority": "high",
+            "reasoning": "Premium feature assignment is untested.",
+            "suggestedTest": "Call upgradeUserSubscription with tier='premium', and verify the query includes exactly the premium features array and sets correct validUntil date one year from now."
+          },
+          {
+            "type": "branch",
+            "location": "upgradeUserSubscription - enterprise tier features",
+            "priority": "high",
+            "reasoning": "Enterprise feature assignment is untested.",
+            "suggestedTest": "Call upgradeUserSubscription with tier='enterprise', and verify the query includes api_access and team_collaboration in the features array."
+          },
+          {
+            "type": "edge-case",
+            "location": "upgradeUserSubscription - expiration date calculation",
+            "priority": "high",
+            "reasoning": "The year calculation for subscription expiry is untested. Should be exactly 1 year from now.",
+            "suggestedTest": "Call upgradeUserSubscription, capture the query call, and assert validUntil is approximately 365 days in the future."
+          },
+          {
+            "type": "function",
+            "location": "hasFeatureAccess",
+            "priority": "critical",
+            "reasoning": "Feature access control is untested. Incorrect logic could grant unauthorized access to premium features.",
+            "suggestedTest": "Call hasFeatureAccess with a valid userId that has premium subscription with 'custom_themes' feature, and assert it returns true."
+          },
+          {
+            "type": "branch",
+            "location": "hasFeatureAccess - no subscription found",
+            "priority": "high",
+            "reasoning": "Users without subscriptions should not have feature access, but this path is untested.",
+            "suggestedTest": "Mock db.query to return empty rows, call hasFeatureAccess, and assert it returns false."
+          },
+          {
+            "type": "branch",
+            "location": "hasFeatureAccess - expired subscription",
+            "priority": "critical",
+            "reasoning": "Expired subscriptions should grant no access. This security-critical path is untested.",
+            "suggestedTest": "Call hasFeatureAccess with a subscription where validUntil is a past date, and assert it returns false regardless of features array."
+          },
+          {
+            "type": "branch",
+            "location": "hasFeatureAccess - valid subscription with feature",
+            "priority": "high",
+            "reasoning": "Path where user has valid subscription and requested feature is untested.",
+            "suggestedTest": "Call hasFeatureAccess with valid subscription containing the requested feature, and assert it returns true."
+          },
+          {
+            "type": "branch",
+            "location": "hasFeatureAccess - valid subscription without feature",
+            "priority": "high",
+            "reasoning": "Path where user has valid subscription but lacks requested feature is untested.",
+            "suggestedTest": "Call hasFeatureAccess with valid premium subscription but request 'api_access' (enterprise feature), and assert it returns false."
+          },
+          {
+            "type": "edge-case",
+            "location": "hasFeatureAccess - JSON parsing",
+            "priority": "medium",
+            "reasoning": "Parsing features array from database is untested. Invalid JSON could cause crashes.",
+            "suggestedTest": "Mock db.query to return invalid JSON in features field, call hasFeatureAccess, and verify it throws or handles the error gracefully."
+          },
+          {
+            "type": "function",
+            "location": "getUserSubscription",
+            "priority": "high",
+            "reasoning": "Subscription retrieval is untested. Incorrect parsing could return malformed data.",
+            "suggestedTest": "Call getUserSubscription with a valid userId, mock database to return subscription row, and assert it returns a Subscription object with correct properties."
+          },
+          {
+            "type": "branch",
+            "location": "getUserSubscription - no subscription found",
+            "priority": "medium",
+            "reasoning": "Users without subscriptions should return null, but this is untested.",
+            "suggestedTest": "Mock db.query to return empty rows, call getUserSubscription, and assert it returns null."
+          },
+          {
+            "type": "branch",
+            "location": "getUserSubscription - subscription found and parsed",
+            "priority": "high",
+            "reasoning": "Successful retrieval and type conversion is untested.",
+            "suggestedTest": "Call getUserSubscription with a userId that has a subscription, verify it returns an object with userId, tier, validUntil as Date, and features as parsed array."
+          },
+          {
+            "type": "edge-case",
+            "location": "getUserSubscription - Date parsing",
+            "priority": "medium",
+            "reasoning": "Converting database date string to Date object is untested. Format mismatches could break functionality.",
+            "suggestedTest": "Call getUserSubscription and assert validUntil is a valid Date object with correct timestamp, not a string."
+          },
+          {
+            "type": "edge-case",
+            "location": "getUserSubscription - features JSON parsing",
+            "priority": "medium",
+            "reasoning": "Parsing features array is untested. Invalid JSON in database could cause crashes.",
+            "suggestedTest": "Mock db.query to return invalid JSON in features, call getUserSubscription, and verify it handles the error or throws."
+          }
+        ],
+        "coverageEstimate": 0,
+        "summary": "This critical payment processing module has zero test coverage. All six exported and internal functions are untested, including security-sensitive card validation, payment processing, pricing calculations, and feature access control. The absence of tests for financial transactions, subscription management, and access control represents a critical risk to data integrity and business logic correctness."
+      },
+      "refactorings": {
+        "file": "src/premium.ts",
+        "suggestions": [
+          {
+            "type": "extract-function",
+            "location": "calculateSubscriptionPrice",
+            "impact": "medium",
+            "description": "Extract tax and processing fee calculations into separate functions for better reusability and testability. Currently these calculations are inline and hard to test independently.",
+            "before": "function calculateSubscriptionPrice(tier: 'premium' | 'enterprise'): number {\n  const PRICING = {\n    premium: 9.99,\n    enterprise: 49.99\n  };\n\n  const basePrice = PRICING[tier];\n  const TAX_RATE = 0.08;\n  const PROCESSING_FEE = 0.029;\n\n  const tax = basePrice * TAX_RATE;\n  const fee = basePrice * PROCESSING_FEE;\n\n  return basePrice + tax + fee;\n}",
+            "after": "function calculateTax(basePrice: number): number {\n  const TAX_RATE = 0.08;\n  return basePrice * TAX_RATE;\n}\n\nfunction calculateProcessingFee(basePrice: number): number {\n  const PROCESSING_FEE = 0.029;\n  return basePrice * PROCESSING_FEE;\n}\n\nfunction calculateSubscriptionPrice(tier: 'premium' | 'enterprise'): number {\n  const PRICING = {\n    premium: 9.99,\n    enterprise: 49.99\n  };\n\n  const basePrice = PRICING[tier];\n  const tax = calculateTax(basePrice);\n  const fee = calculateProcessingFee(basePrice);\n\n  return basePrice + tax + fee;\n}",
+            "benefits": "Each calculation can be tested independently, making the financial logic more maintainable and easier to verify for correctness."
+          },
+          {
+            "type": "extract-function",
+            "location": "upgradeUserSubscription",
+            "impact": "medium",
+            "description": "Extract feature set mapping into a separate function. Currently the tier-to-features mapping is embedded in the subscription upgrade logic.",
+            "before": "async function upgradeUserSubscription(userId: string, tier: 'premium' | 'enterprise'): Promise<void> {\n  const features = tier === 'premium'\n    ? ['unlimited_todos', 'priority_support', 'custom_themes']\n    : ['unlimited_todos', 'priority_support', 'custom_themes', 'api_access', 'team_collaboration'];\n\n  const validUntil = new Date();\n  validUntil.setFullYear(validUntil.getFullYear() + 1);\n\n  const query = 'INSERT INTO subscriptions (user_id, tier, valid_until, features) VALUES ($1, $2, $3, $4) ON CONFLICT (user_id) DO UPDATE SET tier = $2, valid_until = $3, features = $4';\n\n  await db.query(query, [userId, tier, validUntil, JSON.stringify(features)]);\n}",
+            "after": "function getFeaturesForTier(tier: 'premium' | 'enterprise'): string[] {\n  const TIER_FEATURES = {\n    premium: ['unlimited_todos', 'priority_support', 'custom_themes'],\n    enterprise: ['unlimited_todos', 'priority_support', 'custom_themes', 'api_access', 'team_collaboration']\n  };\n  return TIER_FEATURES[tier];\n}\n\nasync function upgradeUserSubscription(userId: string, tier: 'premium' | 'enterprise'): Promise<void> {\n  const features = getFeaturesForTier(tier);\n\n  const validUntil = new Date();\n  validUntil.setFullYear(validUntil.getFullYear() + 1);\n\n  const query = 'INSERT INTO subscriptions (user_id, tier, valid_until, features) VALUES ($1, $2, $3, $4) ON CONFLICT (user_id) DO UPDATE SET tier = $2, valid_until = $3, features = $4';\n\n  await db.query(query, [userId, tier, validUntil, JSON.stringify(features)]);\n}",
+            "benefits": "Feature mappings become a single source of truth, easier to maintain and extend when adding new tiers or features."
+          },
+          {
+            "type": "simplify",
+            "location": "validatePaymentDetails",
+            "impact": "medium",
+            "description": "Simplify the validation logic by reducing multiple sequential if-return statements. Early returns make the code harder to follow; consolidate validations.",
+            "before": "function validatePaymentDetails(payment: PaymentDetails): boolean {\n  const { cardNumber, expiryDate, cvv } = payment;\n\n  // Check card number length\n  if (cardNumber.length !== 16) {\n    return false;\n  }\n\n  // Check CVV length\n  if (cvv.length !== 3 && cvv.length !== 4) {\n    return false;\n  }\n\n  // Validate expiry date format (MM/YY)\n  const expiryRegex = /^(0[1-9]|1[0-2])\\/\\d{2}$/;\n  if (!expiryRegex.test(expiryDate)) {\n    return false;\n  }\n\n  // Check if card is expired\n  const [month, year] = expiryDate.split('/');\n  const expiryDateObj = new Date(2000 + parseInt(year), parseInt(month) - 1);\n\n  if (expiryDateObj < new Date()) {\n    return false;\n  }\n\n  return true;\n}",
+            "after": "function validatePaymentDetails(payment: PaymentDetails): boolean {\n  const { cardNumber, expiryDate, cvv } = payment;\n\n  const isCardNumberValid = cardNumber.length === 16;\n  const isCvvValid = cvv.length === 3 || cvv.length === 4;\n  const isExpiryFormatValid = /^(0[1-9]|1[0-2])\\/\\d{2}$/.test(expiryDate);\n  \n  if (!isCardNumberValid || !isCvvValid || !isExpiryFormatValid) {\n    return false;\n  }\n\n  const [month, year] = expiryDate.split('/');\n  const expiryDateObj = new Date(2000 + parseInt(year), parseInt(month) - 1);\n  const isNotExpired = expiryDateObj >= new Date();\n\n  return isNotExpired;\n}",
+            "benefits": "More declarative validation checks with meaningful variable names make the logic clearer and easier to debug."
+          },
+          {
+            "type": "modernize",
+            "location": "chargeCard",
+            "impact": "low",
+            "description": "Improve error handling by logging more context and avoid swallowing errors silently. Use nullish coalescing or optional chaining for safer property access.",
+            "before": "async function chargeCard(payment: PaymentDetails, amount: number): Promise<boolean> {\n  // Simulate payment gateway call\n  const query = 'INSERT INTO payments (card_last_four, amount, status) VALUES ($1, $2, $3)';\n  const lastFour = payment.cardNumber.slice(-4);\n\n  try {\n    await db.query(query, [lastFour, amount, 'completed']);\n    return true;\n  } catch (error) {\n    console.error('Payment failed:', error);\n    return false;\n  }\n}",
+            "after": "async function chargeCard(payment: PaymentDetails, amount: number): Promise<boolean> {\n  const query = 'INSERT INTO payments (card_last_four, amount, status) VALUES ($1, $2, $3)';\n  const lastFour = payment.cardNumber.slice(-4);\n\n  try {\n    await db.query(query, [lastFour, amount, 'completed']);\n    return true;\n  } catch (error) {\n    console.error('Payment failed:', error instanceof Error ? error.message : String(error));\n    return false;\n  }\n}",
+            "benefits": "Safer error logging prevents potential issues when error is not an Error object. Better type safety."
+          },
+          {
+            "type": "pattern-improvement",
+            "location": "pricing and feature configuration",
+            "impact": "high",
+            "description": "Create a configuration object to centralize tier-based pricing and features. This follows the Strategy pattern and makes the code more maintainable and extensible.",
+            "before": "const PRICING = {\n  premium: 9.99,\n  enterprise: 49.99\n};\n// ... and later ...\nconst features = tier === 'premium'\n  ? ['unlimited_todos', 'priority_support', 'custom_themes']\n  : ['unlimited_todos', 'priority_support', 'custom_themes', 'api_access', 'team_collaboration'];",
+            "after": "const TIER_CONFIG = {\n  premium: {\n    basePrice: 9.99,\n    features: ['unlimited_todos', 'priority_support', 'custom_themes']\n  },\n  enterprise: {\n    basePrice: 49.99,\n    features: ['unlimited_todos', 'priority_support', 'custom_themes', 'api_access', 'team_collaboration']\n  }\n} as const;\n\nfunction calculateSubscriptionPrice(tier: 'premium' | 'enterprise'): number {\n  const basePrice = TIER_CONFIG[tier].basePrice;\n  const TAX_RATE = 0.08;\n  const PROCESSING_FEE = 0.029;\n  const tax = basePrice * TAX_RATE;\n  const fee = basePrice * PROCESSING_FEE;\n  return basePrice + tax + fee;\n}\n\nfunction getFeaturesForTier(tier: 'premium' | 'enterprise'): string[] {\n  return TIER_CONFIG[tier].features;\n}",
+            "benefits": "Single source of truth for tier configuration eliminates duplication, makes adding new tiers easier, and improves code organization."
+          },
+          {
+            "type": "rename",
+            "location": "chargeCard function",
+            "impact": "low",
+            "description": "Rename the comment 'Simulate payment gateway call' is misleading since this actually performs a real database insert. The function should be more explicit about what it does.",
+            "before": "async function chargeCard(payment: PaymentDetails, amount: number): Promise<boolean> {\n  // Simulate payment gateway call\n  const query = 'INSERT INTO payments ...';",
+            "after": "async function chargeCard(payment: PaymentDetails, amount: number): Promise<boolean> {\n  // Record payment in database\n  const query = 'INSERT INTO payments ...';",
+            "benefits": "More accurate documentation reduces confusion about whether this is a mock or real implementation."
+          }
+        ],
+        "summary": "This file has significant refactoring opportunities focused on reducing duplication and improving maintainability. The main issues are scattered tier configuration data (pricing and features), overly verbose validation logic, and financial calculations that are difficult to test independently. Extracting a central tier configuration following the Strategy pattern would eliminate duplication and make the code more extensible. Additionally, simplifying the validation logic with clearer variable names and extracting financial calculations would improve testability and clarity."
+      }
+    }
+  ],
+  "summary": {
+    "totalFiles": 1,
+    "overallScore": 32,
+    "criticalIssues": 1,
+    "highPriorityTests": 15,
+    "refactoringOpportunities": 6
+  },
+  "recommendations": [
+    {
+      "priority": "critical",
+      "category": "Security",
+      "description": "URGENT: Remove storage of plaintext credit card data (cardNumber, CVV, expiryDate in PaymentDetails interface). This violates PCI DSS compliance. Migrate to tokenized payment processing using Stripe, Square, or similar. Never handle raw card data in this application.",
+      "files": [
+        "src/premium.ts"
+      ]
+    },
+    {
+      "priority": "critical",
+      "category": "Testing",
+      "description": "Add comprehensive test suite for premium.ts. All 6 functions and all code paths are untested (0% coverage). Critical gaps include payment processing, card validation, pricing calculations, and access control. Implement tests for 35+ identified test cases.",
+      "files": [
+        "src/premium.ts"
+      ]
+    },
+    {
+      "priority": "high",
+      "category": "Security",
+      "description": "Implement Luhn algorithm validation for credit card numbers. Current length-only validation allows invalid card numbers to be processed. Add validation function and call it from validatePaymentDetails.",
+      "files": [
+        "src/premium.ts"
+      ]
+    },
+    {
+      "priority": "high",
+      "category": "Bug Fix",
+      "description": "Fix card expiry date validation bugs: (1) Y2K-like bug with 2-digit years assumes 2000-2099 range, (2) Expiry check is off by a month due to incorrect Date construction. Set expiry to last day of month and validate against current date properly.",
+      "files": [
+        "src/premium.ts"
+      ]
+    },
+    {
+      "priority": "high",
+      "category": "Error Handling",
+      "description": "Add error handling for unsafe JSON.parse calls at lines 136 and 149. Malformed JSON in features field will crash the application. Wrap in try-catch with fallback to empty array and logging.",
+      "files": [
+        "src/premium.ts"
+      ]
+    },
+    {
+      "priority": "high",
+      "category": "Maintainability",
+      "description": "Refactor payment-related configurations into a centralized TIER_CONFIG object following the Strategy pattern. Eliminates duplication of pricing and features, makes code maintainable for adding new tiers.",
+      "files": [
+        "src/premium.ts"
+      ]
+    },
+    {
+      "priority": "high",
+      "category": "Error Handling",
+      "description": "Improve error logging and handling in chargeCard function. Currently payment failures are silently logged to console. Implement structured logging with context (userId, amount) and consider retry logic for transient failures.",
+      "files": [
+        "src/premium.ts"
+      ]
+    },
+    {
+      "priority": "medium",
+      "category": "Code Quality",
+      "description": "Simplify validatePaymentDetails logic by using more declarative variable names and consolidating validation checks. Current approach with multiple early returns is hard to follow and maintain.",
+      "files": [
+        "src/premium.ts"
+      ]
+    },
+    {
+      "priority": "medium",
+      "category": "Maintainability",
+      "description": "Replace raw SQL queries with an abstraction layer (ORM like Prisma/TypeORM or query builder like Knex.js). Reduces duplication, improves type safety, and makes database operations easier to test.",
+      "files": [
+        "src/premium.ts"
+      ]
+    },
+    {
+      "priority": "medium",
+      "category": "Input Validation",
+      "description": "Add explicit validation for the 'amount' parameter in chargeCard function. Ensure it's a positive finite number before passing to database query to prevent potential injection vulnerabilities.",
+      "files": [
+        "src/premium.ts"
+      ]
+    }
+  ],
+  "metadata": {
+    "analyzedAt": "2026-11-17T00:00:00Z",
+    "duration": 146624,
+    "agentVersions": {
+      "code-quality-analyzer": "1.0.0",
+      "test-coverage-analyzer": "1.0.0",
+      "refactoring-suggester": "1.0.0"
+    }
+  }
+}
