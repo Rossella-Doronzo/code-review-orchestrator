@@ -40,6 +40,11 @@ function checkEnvironment(): void {
       'No credentials found. Set ANTHROPIC_API_KEY, or AWS_ACCESS_KEY_ID + AWS_SECRET_ACCESS_KEY (+ AWS_REGION).'
     );
   }
+    if (!process.env.GITHUB_TOKEN) {
+    fail(
+      'GITHUB_TOKEN is required. Create a personal access token at https://github.com/settings/tokens and add GITHUB_TOKEN=... to your .env file.'
+    );
+  }
   if (!process.env.ANTHROPIC_MODEL) {
     fail(
       'ANTHROPIC_MODEL is required.\n  Anthropic API: claude-sonnet-4-5-20250929\n  AWS Bedrock: us.anthropic.claude-sonnet-4-5-20250929-v1:0'
